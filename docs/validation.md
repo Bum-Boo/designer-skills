@@ -19,7 +19,17 @@ Public candidate: `0.1.0-alpha.1`, checked on 2026-10-21. This is a preview pack
 | Static artifact helper | `scripts/test_verify_static_artifact.py` | Ten tests passed: local/HTTP/ZIP identity, stale content, changes, path/loopback boundaries and invalid DEFLATE failure receipts |
 | PNG privacy regression | Original Blender PNG flagged, builder stamps disabled, new default render and fresh-process render | Public PNG contains no File/Date/Time stamp. Four metadata tests passed, including compressed/international text and corrupt chunks. The regenerated image is reviewed separately because its pixels differ from the first render |
 
-Python helper tests ran on Windows with Python 3.13.3. Skills CLI ran with a temporary Node.js 22.20.0 tool environment; the machine's default Node.js installation was not changed. Linux CI is supplied but was not executed on GitHub during local preparation. macOS runtime and the actual symlink-ancestor case remain untested; the helper resolves ancestor aliases and rejects linked targets/entries by design.
+Python helper tests ran locally on Windows with Python 3.13.3. Skills CLI ran with a temporary Node.js 22.20.0 tool environment; the machine's default Node.js installation was not changed. At local preparation time, Linux CI and the actual symlink-ancestor case had not run. Public verification below adds the hosted Ubuntu result. macOS runtime remains untested.
+
+## Public repository verification
+
+On 2026-10-21, the owner approved MIT publication. The initial production-code commit was `6171c0857a96aa829992326423e9e9460f2bc850`.
+
+- GitHub reported the repository as public with MIT detected. An unauthenticated request retrieved the exact committed README bytes.
+- Skills CLI 1.7.4 installed all four skills from `Bum-Boo/designer-skills` into a separate project. All 22 installed skill files matched committed text after ordinary CRLF/LF normalization.
+- [Ubuntu package CI](https://github.com/Bum-Boo/designer-skills/actions/runs/39490452847) passed: four PNG metadata tests, eight delivery tests and ten static artifact tests. The real symlink-ancestor case passed on Ubuntu; it had been skipped locally on Windows.
+
+These checks do not add AE, macOS or other agent runtime coverage. Publication did not replace the owner's existing global skills.
 
 ## Separate checks
 
