@@ -34,7 +34,7 @@ An optional Git-package launcher avoids maintaining a clone for the basic server
 npx --yes --package=git+https://github.com/Bum-Boo/designer-skills.git designer-tools-mcp --workspace /absolute/working-project
 ```
 
-In JSON, use `command: "npx"` and each argument as a separate array element. On Windows, prefer the clone plus `node` route: clients that cannot launch npm shims need `npx.cmd` or their documented command-shell wrapper. Use a Git commit suffix (`.git#COMMIT`) to pin an approved version. The clone plus `npm ci` route uses the checked-in dependency lockfile and is preferred for reproducible installations. Git-package dependency resolution can change; there is no npm registry release. Use a clone for installing the optional AE panel. Windows tarball installation is tested; public Git installation and the POSIX bin launcher are verified separately after publication.
+In JSON, use `command: "npx"` and each argument as a separate array element. On Windows, prefer the clone plus `node` route: clients that cannot launch npm shims need `npx.cmd` or their documented command-shell wrapper. Use a Git commit suffix (`.git#COMMIT`) to pin an approved version. The clone plus `npm ci` route uses the checked-in dependency lockfile and is preferred for reproducible installations. Git-package dependency resolution can change; there is no npm registry release. Use a clone for installing the optional AE panel. Windows tarball and public Git-package installs both passed real MCP initialization and inventory calls. The POSIX symlink and npm bin launcher passed [Ubuntu CI](https://github.com/Bum-Boo/designer-skills/actions/runs/39494334654).
 
 ## Tools
 

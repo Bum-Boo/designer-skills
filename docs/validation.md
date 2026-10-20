@@ -10,7 +10,7 @@ Current preview: `0.2.0-alpha.1`, extended on 2026-10-21 with an optional MCP se
 - The original helper regressions still pass: 4 metadata tests, 8 delivery tests (one Windows symlink-privilege skip) and 10 static artifact tests. No original personal skill, global MCP configuration or AE project was changed.
 - The server uses pinned MCP SDK 1.32.1, ws 8.22.0 and Zod 3.25.76. Dependency installation reported zero known vulnerabilities at the time of this check. Mock/native/client scopes remain distinct. Japanese and Chinese MCP summaries have no native-speaker review.
 
-Public Git-package installation and GitHub CI are checked after publication and recorded in the repository history and maintainer evidence; the observations above are local checks.
+After publication, the public Git package pinned to `89a9beb9cebef247ca7a7232e79ce33e1fd57ebd` installed into an isolated working directory on Windows: real MCP initialization, six default tools and a Python inventory call passed under Node 22.20.0. Anonymous raw source checks matched five Git blobs, and the ZIP matched all 59 tracked files. [Ubuntu CI](https://github.com/Bum-Boo/designer-skills/actions/runs/39494334654) passed all 16 Node and 22 Python tests, including the actual POSIX npm bin launcher and symlink entry path. This does not extend native AE validation or certify every client's configuration UI.
 
 ## Observed locally
 
