@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+.agents/
+.claude/
+.hermes/
+node_modules/
+output/
+*.blend
+*.blend1
+*.aep
+*.mp4

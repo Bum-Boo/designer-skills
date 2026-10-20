@@ -1,0 +1,16 @@
+name: Package checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/validate.py
+      - run: python scripts/test_validate.py
+      - run: python skills/asset-delivery/scripts/test_delivery_manifest.py -v
+      - run: python skills/reference-to-web-toy/scripts/test_verify_static_artifact.py

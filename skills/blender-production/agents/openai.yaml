@@ -1,0 +1,4 @@
+interface:
+  display_name: "Blender Production"
+  short_description: "Editable Blender scenes with verified renders"
+  default_prompt: "Use $blender-production to create an editable product scene and verify its rendered result."

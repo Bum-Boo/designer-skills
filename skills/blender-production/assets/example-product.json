@@ -1,0 +1,15 @@
+{
+  "name": "NOVA Fieldnote",
+  "width_m": 0.160,
+  "height_m": 0.238,
+  "depth_m": 0.010,
+  "corner_radius_m": 0.012,
+  "body_color": [0.055, 0.100, 0.120, 1.0],
+  "screen_bottom": [0.008, 0.040, 0.065, 1.0],
+  "screen_top": [0.025, 0.280, 0.300, 1.0],
+  "resolution": [1280, 1024],
+  "samples": 48,
+  "camera_mm": 55,
+  "label": "FIELDNOTE",
+  "sublabel": "N O V A   /   0 1"
+}

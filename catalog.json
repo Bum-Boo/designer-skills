@@ -1,0 +1,11 @@
+{
+  "name": "designer-skills",
+  "version": "0.1.0-alpha.1",
+  "license": "MIT",
+  "skills": [
+    {"name": "blender-production", "category": "3d", "kind": "workflow-and-tools", "requires": ["Blender"], "status": "tested-template"},
+    {"name": "after-effects-production", "category": "motion", "kind": "workflow", "requires": ["After Effects", "authorized scripting or bridge route"], "status": "integration-required"},
+    {"name": "reference-to-web-toy", "category": "interaction", "kind": "workflow-and-tools", "requires": ["browser automation", "Python 3.10+"], "status": "tool-tests-only"},
+    {"name": "asset-delivery", "category": "handoff", "kind": "workflow-and-tools", "requires": ["Python 3.12+"], "status": "tool-tests-only"}
+  ]
+}
