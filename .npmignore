@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+output/
+node_modules/
+.agents/
+.claude/
+.hermes/
+*.blend
+*.aep
+*.mp4

@@ -2,7 +2,7 @@
 name: after-effects-production
 description: Build or revise motion graphics as an editable After Effects project with native text, clear composition structure, preview playback and a short editing guide. Use when a designer needs an .aep they can continue editing, or needs a video reference translated into an AE shot plan.
 license: MIT
-compatibility: Licensed Adobe After Effects and an authorized JSX, scripting or MCP execution route. An adapter is not bundled. Video frame extraction may use ffmpeg and ffprobe.
+compatibility: Licensed Adobe After Effects and an authorized JSX, scripting or MCP execution route. Optional Designer Tools MCP and CEP companion are installed separately from the skill. Video frame extraction may use ffmpeg and ffprobe.
 ---
 
 # After Effects production
@@ -11,7 +11,7 @@ Deliver an editable `.aep`, a playable preview and a short editing guide. Start 
 
 ## Check the execution route
 
-Confirm the installed AE version, open project and available scripting/bridge capability. Use the existing authorized adapter or AE's script execution workflow. This skill supplies production instructions, not an AE connector. If execution is unavailable, prepare a shot plan and source script, state that `.aep` generation is pending, and give the exact missing dependency.
+Confirm the installed AE version, open project and available scripting/bridge capability. Use the existing authorized adapter or AE's script execution workflow. The optional [Designer Tools MCP and CEP companion](https://github.com/Bum-Boo/designer-skills/blob/main/docs/mcp.md) can expose `ae_status`, `comp_list` and explicitly enabled `run_jsx`. Installing this skill alone does not install or register that connection. Check status before scripts; use native AE controls for project lifecycle and rendering. After uncertain execution, inspect AE and retained job evidence before retrying. If execution is unavailable, prepare a shot plan and source script, state that `.aep` generation is pending, and give the exact missing dependency.
 
 ## Turn a brief into editable controls
 

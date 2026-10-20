@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Designer skills AE connection</title></head>
+<body><main><h1>AE connection</h1>
+<form id="connection"><p><label>Local port <input id="port" type="number" min="1" max="65535" value="47620" required></label></p>
+<p><label>Session token <input id="token" type="password" autocomplete="off" minlength="32" required></label></p>
+<button type="submit">Connect</button><button type="button" id="disconnect">Disconnect</button></form>
+<p id="status" role="status">Disconnected. Start the local MCP companion first.</p>
+<p>Tokens stay in this panel session. Native scripts require separate server opt-in.</p>
+</main><script src="connection.js"></script></body></html>

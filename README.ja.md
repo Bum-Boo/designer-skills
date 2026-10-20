@@ -6,7 +6,7 @@
 
 参考資料やブリーフから、編集を続けられる成果物を作ります。Blenderシーン、After Effectsプロジェクト、インタラクティブな試作、納品フォルダーまで、各スキルに成果物、編集箇所、実際の結果を確認する手順を定義しています。
 
-**プレビュー · 0.1.0-alpha.1** — 最初の構成は4つです。付属ツールと手順の検証範囲は異なります。[検証記録](docs/validation.md)をご覧ください。
+**プレビュー · 0.2.0-alpha.1** — 最初の構成は4つです。付属ツールと手順の検証範囲は異なります。[検証記録](docs/validation.md)をご覧ください。
 
 ![付属のBlenderテンプレートで生成した製品シーン](docs/images/blender-product.png)
 
@@ -19,9 +19,9 @@
 | [reference-to-web-toy](skills/reference-to-web-toy/SKILL.md) | 参考資料から動くインタラクションを再現 | 動き・操作の一覧、ブラウザー比較、成果物検査 | ブラウザー自動化、検査用Python |
 | [asset-delivery](skills/asset-delivery/SKILL.md) | 納品フォルダー・ZIPの不足確認 | ファイル数、SHA-256、アーカイブ検査、基準版との比較 | Python 3.12+ |
 
-制作手順と一部のローカルツールを提供します。アプリ、許可されたコネクター、必要なアカウントは別途用意してください。AE接続アダプターは含みません。このコレクション内の他のスキルは必須ではありません。
+4つのスキルは個別にインストールできます。アプリとアカウントは別途必要です。リポジトリにはローカルMCPサーバーとオプションのAE CEP接続も含まれ、スキルとは別にインストール・登録します。
 
-4つの小さな[制作ツール](docs/tools.md)をスキルフォルダーに同梱しています。大きなアプリ連携ツールは別途インストールします。
+4つの小さな[制作ツール](docs/tools.md)をスキルフォルダーに同梱しています。[Designer Tools MCP](docs/mcp.md)はファイル検査、Blender生成・検査、オプションのAE接続を提供します。
 
 ## インストール
 
@@ -40,6 +40,16 @@ npx skills@latest add Bum-Boo/designer-skills --skill blender-production -a code
 `codex`を`claude-code`、`hermes-agent`などに変更できます。ユーザー全体へのインストールは`-g`を追加します。同名の既存スキルを置き換える前に確認してください。Blender、Adobeアプリ、MCPサーバーはインストールされません。
 
 手動の場合はリポジトリを取得し、選択した**スキルフォルダー全体**を`LICENSE`と一緒にエージェントのスキル保存先へコピーします。スクリプトと参照ファイルを一緒に保ってください。[インストール詳細](docs/installation.md)に保存先を記載しています。
+
+## オプションのMCPサーバー
+
+同じリポジトリからサーバーをインストールし、実行コマンドと作業プロジェクトのパスをエージェントに登録します。Node.js 22.20以上が必要で、PythonとBlenderは各ツールにのみ必要です。AEは同梱CEPパネルの別途設定が必要です。[インストール・設定例・制限](docs/mcp.md)。
+
+```bash
+git clone https://github.com/Bum-Boo/designer-skills.git
+cd designer-skills
+npm ci --ignore-scripts
+```
 
 ## 使用例
 

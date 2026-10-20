@@ -15,4 +15,8 @@ The repository also has a maintainer package validator and tests. These support 
 
 ## Larger integrations
 
-AE bridges, ComfyUI connections and other application services should have their own versioned installation and compatibility documentation. A future skill can depend on one, but should name the actual tool, check its connection and explain what remains possible without it. This collection currently bundles no AE bridge or ComfyUI connector. Application licenses, authentication and service installation remain separate from skill installation.
+Application integrations need their own installation and compatibility documentation. This collection includes an optional [AE CEP companion](mcp.md) whose native AE execution remains unverified; no ComfyUI connector is bundled. Check the actual connection before relying on it. Application licenses, authentication and service installation remain separate from skill installation.
+
+## Optional MCP wrapper
+
+[Designer Tools MCP](mcp.md) exposes the same four helpers through six default tool calls, plus an optional local AE connection. Its server code, dependency lockfile, CEP panel and configuration examples are included in this repository. Installing a skill alone does not register the server.

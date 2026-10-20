@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "designer-tools": {
+      "command": "node",
+      "args": ["/absolute/designer-skills/mcp/server.mjs", "--workspace", "/absolute/working-project"]
+    }
+  }
+}

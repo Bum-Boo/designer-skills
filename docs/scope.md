@@ -5,7 +5,7 @@ This collection is organized by a designer's finished work: 3D scene, motion pro
 ## First set
 
 - Blender production: executable scene template and fresh-process inspection, with visual acceptance separate from scene statistics.
-- After Effects production: native editability and a usable project handoff. This is an integration-dependent workflow, not a bundled AE bridge.
+- After Effects production: native editability and a usable project handoff. The optional bundled MCP/CEP companion supplies a narrow connection; native AE runtime validation remains pending.
 - Reference to web toy: visible behavior and controls translated into browser acceptance checks, with a static artifact verifier.
 - Asset delivery: read-only folder/ZIP inventory and comparisons, with exact file identity.
 
@@ -14,7 +14,7 @@ This collection is organized by a designer's finished work: 3D scene, motion pro
 | Candidate | What must be added before inclusion |
 |---|---|
 | AI image/video shot production | Provider-neutral shot briefs, budget/consent handling, reference continuity and actual output tests; no mandatory paid provider |
-| AE automation loop | Portable/project adapters and an exercised build/save/render/reopen flow before claiming automation |
+| AE automation loop | An exercised native build/save/render/reopen flow beyond the bundled connection before claiming production automation |
 | Figma and diagram workflow adaptations | Identify the authored delta, preserve upstream notices and demonstrate designer value |
 | Cross-media visual review | Real image/video inspection, version-bound observations and explicit unreviewed scope |
 

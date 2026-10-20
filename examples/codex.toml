@@ -1,0 +1,5 @@
+# Replace both paths. Node must be available to your Codex process.
+[mcp_servers.designer-tools]
+command = "node"
+args = ["/absolute/designer-skills/mcp/server.mjs", "--workspace", "/absolute/working-project"]
+tool_timeout_sec = 660

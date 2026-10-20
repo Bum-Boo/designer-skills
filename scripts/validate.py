@@ -113,7 +113,7 @@ def validate(root=ROOT):
             except (ValueError, IndexError, zlib.error) as error:
                 errors.append(f'{path.relative_to(root)}: invalid PNG metadata: {error}')
             continue
-        if path.suffix not in {'.md', '.py', '.json', '.yaml', '.yml', '.txt'}:
+        if path.suffix not in {'.md', '.py', '.json', '.yaml', '.yml', '.txt', '.mjs', '.js', '.jsx', '.xml', '.html', '.toml'}:
             continue
         relative = path.relative_to(root).as_posix()
         content = path.read_text(encoding='utf-8')

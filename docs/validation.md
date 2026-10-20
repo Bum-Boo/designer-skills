@@ -1,6 +1,16 @@
 # Validation and limits
 
-Public candidate: `0.1.0-alpha.1`, checked on 2026-10-21. This is a preview package. A tool test, a successful installation and a successful creative task are separate observations.
+Current preview: `0.2.0-alpha.1`, extended on 2026-10-21 with an optional MCP server. The original skill/package observations below refer to `0.1.0-alpha.1`; unchanged helpers retain that evidence. A tool test, a successful installation and a successful creative task are separate observations.
+
+## MCP extension observations
+
+- Windows, Node 22.20.0, Python 3.13.3: 16 Node tests passed. Actual MCP stdio initialization and tool calls, real Python helper inventory/comparison/static checking, path escape and symlink-ancestor rejection, child process failure/timeout/output cap/cleanup passed. Optional AE tool counts 8/9 and script opt-in were exercised through a mock CEP panel.
+- The same MCP server invoked Blender 5.2.2 LTS in background CPU mode: a 320×256 synthetic template was built, rendered, saved and inspected with a fresh-process re-render. Both structural receipts passed. Reusing the output directory was refused and the saved `.blend` bytes stayed identical. This integration check establishes execution/structure, not a new visual-quality review.
+- Ten of the Node tests concern AE companion transport/recovery and installer behavior. They use mock CEP WebSockets and real temporary argument/result files. No connected AE/CEP session was available, so native host execution, panel loading, app preferences and AE compatibility remain unverified. The manifest's AEFT25+/CSXS12 range is a declaration.
+- The original helper regressions still pass: 4 metadata tests, 8 delivery tests (one Windows symlink-privilege skip) and 10 static artifact tests. No original personal skill, global MCP configuration or AE project was changed.
+- The server uses pinned MCP SDK 1.32.1, ws 8.22.0 and Zod 3.25.76. Dependency installation reported zero known vulnerabilities at the time of this check. Mock/native/client scopes remain distinct. Japanese and Chinese MCP summaries have no native-speaker review.
+
+Public Git-package installation and GitHub CI are checked after publication and recorded in the repository history and maintainer evidence; the observations above are local checks.
 
 ## Observed locally
 

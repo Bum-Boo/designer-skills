@@ -16,7 +16,7 @@ npx skills@latest add Bum-Boo/designer-skills --skill blender-production -a code
 npx skills@latest add Bum-Boo/designer-skills --skill '*' -a hermes-agent -g
 ```
 
-For local candidate testing, replace `Bum-Boo/designer-skills` with the local repository path. Use space-separated `--skill NAME`, as shown. The package does not install apps, plugins, credentials or tool adapters. Avoid overwriting a modified skill with the same name without reviewing the differences.
+For local candidate testing, replace `Bum-Boo/designer-skills` with the local repository path. Use space-separated `--skill NAME`, as shown. The Skills CLI installs skill files. Install the optional MCP server and AE panel separately; it does not install applications or credentials. Avoid overwriting a modified skill with the same name without reviewing the differences.
 
 ## Manual installation
 
@@ -34,4 +34,8 @@ Start a new conversation if your agent caches its skill list. Ask it to use the 
 
 ## Updating and removal
 
-For CLI-managed installations, use the CLI's `skills check`, `skills update` and `skills remove` commands. For a manual copy, compare with the new source and keep local modifications before replacing or removing that copied directory. This repository does not change agent settings, register MCP servers or create background services.
+For CLI-managed installations, use the CLI's `skills check`, `skills update` and `skills remove` commands. For a manual copy, compare with the new source and keep local modifications before replacing or removing that copied directory. Installation does not change agent settings or create background services. Register the optional MCP command explicitly in your client.
+
+## Optional MCP tools
+
+The [MCP setup guide](mcp.md) includes clone/install commands, JSON and Codex TOML examples, executable selection, working-project paths, the optional AE panel and removal instructions. The server is distributed from this Git repository; no npm registry release is needed.

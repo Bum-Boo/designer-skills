@@ -6,7 +6,7 @@
 
 把参考资料或设计简报变成可以继续编辑的成果：Blender 场景、After Effects 工程、交互原型，以及经过核对的交付文件夹。每项技能都说明交付内容、编辑位置和实际结果的检查方法。
 
-**预览版 · 0.1.0-alpha.1** — 首批包含四项技能。附带工具和工作流程的验证范围不同，请查看[验证记录](docs/validation.md)。
+**预览版 · 0.2.0-alpha.1** — 首批包含四项技能。附带工具和工作流程的验证范围不同，请查看[验证记录](docs/validation.md)。
 
 ![使用附带 Blender 模板生成的产品场景](docs/images/blender-product.png)
 
@@ -19,9 +19,9 @@
 | [reference-to-web-toy](skills/reference-to-web-toy/SKILL.md) | 根据参考资料实现可操作的交互 | 动作与控件清单、浏览器对照、成果文件检查器 | 浏览器自动化；检查器需要 Python |
 | [asset-delivery](skills/asset-delivery/SKILL.md) | 核对交付文件夹或 ZIP 是否缺漏 | 文件数量、SHA-256、压缩包检查、与基准版本比较 | Python 3.12+ |
 
-本仓库提供工作说明和部分本地工具。应用、经授权的连接器及所需账号需要另行准备。不附带 AE 连接适配器。各项技能不依赖本合集中的其他技能。
+四项技能可以独立安装。应用和账号需要另行准备。仓库还包含本地 MCP 服务器和可选 AE CEP 连接器，需要与技能分别安装和注册。
 
-四个小型[制作工具](docs/tools.md)随技能目录一起提供。大型应用连接器需要另行安装。
+四个小型[制作工具](docs/tools.md)随技能目录一起提供。[Designer Tools MCP](docs/mcp.md)提供文件检查、Blender 生成与检查，以及可选 AE 连接。
 
 ## 安装
 
@@ -40,6 +40,16 @@ npx skills@latest add Bum-Boo/designer-skills --skill blender-production -a code
 可以把 `codex` 换成 `claude-code`、`hermes-agent` 等受支持的智能体。添加 `-g` 可安装到用户范围。替换已有同名技能前，请先检查。本命令不会安装 Blender、Adobe 应用或 MCP 服务器。
 
 离线或手动安装时，获取仓库并把选中的**整个技能目录**连同 `LICENSE` 复制到智能体支持的技能路径。请保留脚本与参考文件。路径见[安装详情](docs/installation.md)。
+
+## 可选 MCP 服务器
+
+从同一仓库安装服务器，然后在智能体中注册执行命令和工作项目路径。需要 Node.js 22.20+，Python 和 Blender 仅由对应工具使用。AE 需要单独配置附带的 CEP 面板。[安装、配置示例与限制](docs/mcp.md)。
+
+```bash
+git clone https://github.com/Bum-Boo/designer-skills.git
+cd designer-skills
+npm ci --ignore-scripts
+```
 
 ## 使用示例
 

@@ -6,7 +6,7 @@
 
 레퍼런스나 브리프를 계속 수정할 수 있는 결과물로 만듭니다. Blender 장면, After Effects 프로젝트, 인터랙티브 프로토타입, 검증된 납품 폴더까지 각 스킬에 산출물·수정 위치·실제 결과 확인 방법을 담았습니다.
 
-**프리뷰 · 0.1.0-alpha.1** — 첫 구성은 네 가지입니다. 도구와 작업 안내의 검증 범위는 다릅니다. [검증 기록](docs/validation.md)을 확인하세요.
+**프리뷰 · 0.2.0-alpha.1** — 첫 구성은 네 가지입니다. 도구와 작업 안내의 검증 범위는 다릅니다. [검증 기록](docs/validation.md)을 확인하세요.
 
 ![동봉된 Blender 템플릿으로 생성한 제품 장면](docs/images/blender-product.png)
 
@@ -19,9 +19,9 @@
 | [reference-to-web-toy](skills/reference-to-web-toy/SKILL.md) | 레퍼런스를 동작하는 인터랙션으로 재현 | 동작·조작 목록, 브라우저 비교, 파일 검증기 | 브라우저 자동화; 검증기는 Python |
 | [asset-delivery](skills/asset-delivery/SKILL.md) | 납품 폴더·ZIP 누락 검사 | 수량, SHA-256, 압축파일 검사, 기준본 대조 | Python 3.12+ |
 
-작업 지침과 일부 로컬 도구를 제공합니다. 앱·허가된 커넥터·필요한 계정은 별도로 준비하세요. AE 연결기는 포함하지 않습니다. 이 모음의 다른 스킬을 함께 설치해야 하는 필수 의존성은 없습니다.
+네 스킬은 각각 설치할 수 있습니다. 앱과 계정은 별도로 준비하세요. 저장소에는 로컬 MCP 서버와 선택형 AE CEP 연결기도 포함하며, 스킬과 별도로 설치·등록합니다.
 
-작은 [제작 도구 네 개](docs/tools.md)는 스킬 폴더에 함께 들어 있습니다. 큰 앱 연결기는 별도로 설치합니다.
+작은 [제작 도구 네 개](docs/tools.md)는 스킬 폴더에 함께 들어 있습니다. [Designer Tools MCP](docs/mcp.md)에서 파일 검사·Blender 생성과 검수·선택형 AE 연결을 제공합니다.
 
 ## 설치
 
@@ -40,6 +40,16 @@ npx skills@latest add Bum-Boo/designer-skills --skill blender-production -a code
 `codex`를 `claude-code`, `hermes-agent` 등 지원 에이전트로 바꿀 수 있습니다. 사용자 전체 설치는 `-g`를 추가하세요. 같은 이름의 기존 스킬을 교체하기 전에 확인하세요. Blender·Adobe 앱·MCP 서버를 설치하는 명령은 아닙니다.
 
 수동 설치는 저장소를 복제하거나 내려받아 선택한 **스킬 폴더 전체**를 `LICENSE`와 함께 에이전트의 스킬 경로에 복사합니다. 스크립트·참조 파일을 함께 유지하세요. [설치 안내](docs/installation.md)에 경로를 정리했습니다.
+
+## 선택형 MCP 서버
+
+같은 저장소에서 서버를 설치하고 에이전트에 실행 명령과 작업 프로젝트 경로를 등록합니다. Node.js 22.20 이상이 필요하며 Python과 Blender는 해당 도구에만 필요합니다. AE는 동봉된 CEP 패널의 별도 설정이 필요합니다. [설치·설정 예제와 한계](docs/mcp.md).
+
+```bash
+git clone https://github.com/Bum-Boo/designer-skills.git
+cd designer-skills
+npm ci --ignore-scripts
+```
 
 ## 사용 예
 

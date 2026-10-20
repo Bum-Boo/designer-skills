@@ -1,0 +1,17 @@
+{
+  "name": "designer-skills-mcp",
+  "version": "0.2.0-alpha.1",
+  "private": true,
+  "description": "Local production tools for the Designer Skills collection",
+  "type": "module",
+  "license": "MIT",
+  "engines": {"node": ">=22.20.0"},
+  "bin": {"designer-tools-mcp": "mcp/server.mjs"},
+  "files": ["mcp/", "skills/**/LICENSE", "skills/**/*.md", "skills/**/*.py", "skills/**/*.json", "skills/**/*.yaml", "scripts/*.py", "examples/", "LICENSE", "catalog.json", "docs/"],
+  "scripts": {"test": "node --test mcp/*.test.mjs mcp/ae/*.test.mjs", "start": "node mcp/server.mjs"},
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ws": "8.22.0",
+    "zod": "3.25.76"
+  }
+}

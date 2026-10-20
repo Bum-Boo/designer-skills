@@ -10,6 +10,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npx --yes --package=. designer-tools-mcp --help
       - run: python scripts/validate.py
       - run: python scripts/test_validate.py
       - run: python skills/asset-delivery/scripts/test_delivery_manifest.py -v

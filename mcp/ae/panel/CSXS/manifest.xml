@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="7.0" ExtensionBundleId="org.bumboo.designerskills.ae" ExtensionBundleVersion="0.1.0" ExtensionBundleName="Designer skills AE">
+  <ExtensionList><Extension Id="org.bumboo.designerskills.ae.panel" Version="0.1.0" /></ExtensionList>
+  <ExecutionEnvironment><HostList><Host Name="AEFT" Version="[25.0,99.9]" /></HostList><LocaleList><Locale Code="All" /></LocaleList><RequiredRuntimeList><RequiredRuntime Name="CSXS" Version="12.0" /></RequiredRuntimeList></ExecutionEnvironment>
+  <DispatchInfoList><Extension Id="org.bumboo.designerskills.ae.panel"><DispatchInfo><Resources><MainPath>./client/index.html</MainPath></Resources><Lifecycle><AutoVisible>true</AutoVisible></Lifecycle><UI><Type>Panel</Type><Menu>Designer skills AE</Menu><Geometry><Size><Width>340</Width><Height>260</Height></Size></Geometry></UI></DispatchInfo></Extension></DispatchInfoList>
+</ExtensionManifest>
