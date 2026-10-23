@@ -16,6 +16,7 @@ export class Runtime {
     this.python = python;
     this.blender = blender;
     this.children = new Set();
+    this.stoppers = new Set();
     this.closed = false;
     this.blenderTail = Promise.resolve();
   }
@@ -49,11 +50,47 @@ export class Runtime {
   async run(command, args, {timeout = 120000, codes = [0]} = {}) {
     if (this.closed) throw new Error('Runtime is closed');
     return await new Promise((resolve, reject) => {
-      const child = spawn(command, args, {cwd: this.workspace, shell: false, windowsHide: true,
+      const grouped = process.platform !== 'win32';
+      const child = spawn(command, args, {cwd: this.workspace, shell: false, windowsHide: true, detached: grouped,
         stdio: ['ignore', 'pipe', 'pipe'], env: {...process.env, PYTHONUTF8: '1'}});
       this.children.add(child);
-      let stdout = '', stderr = '', failure;
-      const stop = (message) => { failure ??= new Error(message); child.kill(); };
+      let stdout = '', stderr = '', failure, escalation, settled = false, stopping = false;
+      const signal = value => {
+        if (!child.pid) return;
+        try {
+          if (grouped) process.kill(-child.pid, value);
+          else child.kill(value);
+        } catch (error) {
+          if (error.code !== 'ESRCH') failure ??= error;
+        }
+      };
+      const finish = code => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        clearTimeout(escalation);
+        // A wrapper can close before its descendants, even when their pipes are ignored.
+        if (stopping && grouped) signal('SIGKILL');
+        this.children.delete(child);
+        this.stoppers.delete(stop);
+        if (failure) reject(failure);
+        else if (!codes.includes(code)) reject(new Error(`Tool exited ${code}: ${(stderr || stdout).slice(-4000)}`));
+        else resolve({code, stdout, stderr});
+      };
+      const stop = message => {
+        failure ??= new Error(message);
+        if (stopping || settled) return;
+        stopping = true;
+        signal('SIGTERM');
+        escalation = setTimeout(() => {
+          signal('SIGKILL');
+          child.stdout.destroy();
+          child.stderr.destroy();
+          // Escaped descendants may retain pipe handles; never wait for them indefinitely.
+          finish(null);
+        }, 500);
+      };
+      this.stoppers.add(stop);
       const timer = setTimeout(() => stop('Tool timed out; inspect partial output before retrying'), timeout);
       child.stdout.on('data', data => {
         if (failure) return;
@@ -63,14 +100,8 @@ export class Runtime {
       child.stderr.on('data', data => {
         stderr = (stderr + data.toString()).slice(-16384);
       });
-      child.on('error', error => { failure = error; });
-      child.on('close', code => {
-        clearTimeout(timer);
-        this.children.delete(child);
-        if (failure) reject(failure);
-        else if (!codes.includes(code)) reject(new Error(`Tool exited ${code}: ${(stderr || stdout).slice(-4000)}`));
-        else resolve({code, stdout, stderr});
-      });
+      child.on('error', error => { failure ??= error; });
+      child.on('close', finish);
     });
   }
   async pythonJson(script, args, options) {
@@ -148,6 +179,6 @@ export class Runtime {
   }
   close() {
     this.closed = true;
-    for (const child of this.children) child.kill();
+    for (const stop of this.stoppers) stop('Runtime closed while a tool was running; inspect partial output before retrying');
   }
 }

@@ -131,8 +131,12 @@ def verify(args):
                                   "all_declared_match": all(matches.values())}
         if args.baseline_receipt:
             baseline = json.loads(Path(args.baseline_receipt).read_text(encoding="utf-8"))
+            if not isinstance(baseline, dict):
+                raise ValueError("Baseline must be a JSON object")
             if baseline.get("schema") != receipt["schema"] or baseline.get("status") != "PASS":
                 raise ValueError("Baseline must be a PASS receipt from this verifier")
+            if not isinstance(baseline.get("files"), dict):
+                raise ValueError("Baseline files must be a JSON object")
             old_assets = {k: v["sha256"] for k, v in baseline["files"].items()
                           if k != baseline["entry"]}
             new_assets = {k: v["sha256"] for k, v in files.items() if k != entry}

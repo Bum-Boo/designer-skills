@@ -95,6 +95,24 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertFalse(receipt["expected_source_matches"])
 
+    def test_malformed_baseline_writes_fail_receipt(self):
+        _, valid = self.run_check()
+        values = [[], "PASS", 1, True, None]
+        values += [{**valid, "files": files} for files in [[], None, "bad", 3]]
+        for index, value in enumerate(values):
+            with self.subTest(value=value):
+                baseline = self.root / f"bad-baseline-{index}.json"
+                output = self.root / f"failure-{index}.json"
+                baseline.write_text(json.dumps(value), encoding="utf-8")
+                result, summary = self.run_check("--baseline-receipt", str(baseline),
+                                                 "--out", str(output))
+                self.assertEqual(result.returncode, 1)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(summary["status"], "FAIL")
+                receipt = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(receipt["status"], "FAIL")
+                self.assertIn("JSON object", receipt["failures"][0])
+
     def test_baseline_distinguishes_css_and_runtime_changes(self):
         baseline = self.root / "baseline.json"
         result, _ = self.run_check("--out", str(baseline))
