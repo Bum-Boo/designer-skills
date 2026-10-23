@@ -14,4 +14,4 @@ python3 -B skills/reference-to-web-toy/scripts/test_verify_static_artifact.py -v
 
 첫 검사에서 Node 5개·Python 11개 통과. Node 신규 두 검사는 TERM을 무시하는 합성 래퍼와 하위 sleep 프로세스를 실제로 실행해 시간초과·종료 후 살아 있지 않음을 확인한다(Linux 전용). 기존 경로 검사·Python 도구 호출도 통과했다. 중첩 `files` 오형식까지 추가한 뒤 해당 CLI 회귀 검사 1개(9가지 잘못된 값)를 별도로 실행해 통과했다.
 
-실제 Blender/AE, MCP 클라이언트의 취소 전달, Windows/macOS 프로세스 트리는 이 검사로 검증되지 않는다. 설치한 개인 스킬이나 MCP 설정은 변경하지 않았다. 최종 반영 전 독립 클라우드 검토를 받는다.
+실제 Blender/AE, MCP 클라이언트의 취소 전달, Windows/macOS 프로세스 트리는 이 검사로 검증되지 않는다. 설치한 개인 스킬이나 MCP 설정은 변경하지 않았다. 독립 클라우드 검토(`e35f65f`)는 정확한 후보 `d91596e`를 별도 worktree에서 검증했다. Node 전체 18개·Python verifier 11개, 기존 재현기와 추가 종료 경로를 통과했고 테스트 범위에서 차단 이슈는 없었다. 서버를 SIGKILL하면 도구 프로세스가 남을 수 있다는 비차단 관찰은 운영 문서에 보완했다. 실제 앱·Windows/macOS 검증은 여전히 남아 있다.
