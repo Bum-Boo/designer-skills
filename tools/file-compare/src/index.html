@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FFFFFF">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval'; worker-src blob:; style-src 'unsafe-inline'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>파일 비교</title>
+  <style>/* APP_STYLE */</style>
+</head>
+<body>
+  <a class="skip" href="#sources">비교할 폴더 선택으로 건너뛰기</a>
+  <main>
+    <header>
+      <h1>파일 비교</h1>
+      <p>파일은 이 컴퓨터 안에서만 읽습니다. 업로드하지 않습니다.</p>
+    </header>
+    <section id="sources" aria-label="비교할 폴더">
+      <div class="source-row">
+        <h2>기준</h2>
+        <div class="source-actions">
+          <button id="pick-reference" type="button">폴더 선택…</button>
+          <button id="import-reference" type="button">목록 불러오기…</button>
+        </div>
+        <p id="reference-summary">원본 폴더나 저장한 파일 목록(JSON)을 고르세요.</p>
+        <input id="reference-files" type="file" webkitdirectory multiple hidden aria-label="기준 폴더">
+        <input id="manifest-file" type="file" accept=".json,application/json" hidden aria-label="기준 파일 목록">
+      </div>
+      <div class="source-row">
+        <h2>받은 폴더</h2>
+        <div class="source-actions"><button id="pick-received" type="button">폴더 선택…</button></div>
+        <p id="received-summary">다른 기기로 옮겼거나 전달받은 폴더를 고르세요.</p>
+        <input id="received-files" type="file" webkitdirectory multiple hidden aria-label="받은 폴더">
+      </div>
+    </section>
+    <div id="work" hidden>
+      <div class="work-label"><p id="progress-label">확인 중…</p><button id="cancel" type="button">취소</button></div>
+      <progress id="progress" max="100" value="0" aria-labelledby="progress-label"></progress>
+    </div>
+    <p id="error" role="alert" hidden></p>
+    <section id="results" aria-label="비교 결과">
+      <h2 id="verdict" tabindex="-1">두 쪽을 고르면 비교 결과가 나옵니다.</h2>
+      <p id="counts" class="muted"></p>
+      <label id="zero-check" hidden><input id="confirm-zero" type="checkbox"> <span id="zero-text"></span></label>
+      <div id="result-tools" hidden>
+        <div class="filters" role="group" aria-label="파일 상태 필터">
+          <button data-filter="all" aria-pressed="true">전체</button>
+          <button data-filter="different" aria-pressed="false">차이만</button>
+          <button data-filter="missing" aria-pressed="false">없음</button>
+          <button data-filter="changed" aria-pressed="false">변경</button>
+          <button data-filter="extra" aria-pressed="false">추가</button>
+          <button data-filter="same" aria-pressed="false">같음</button>
+        </div>
+        <div class="search-line">
+          <label for="search">경로 검색</label>
+          <input id="search" name="search" type="search" placeholder="예: render/…" autocomplete="off" spellcheck="false">
+          <p id="visible-count" class="muted"></p>
+        </div>
+      </div>
+      <div id="table-wrap" hidden>
+        <table>
+          <caption class="sr-only">파일 경로와 크기 비교</caption>
+          <thead><tr><th scope="col">상태</th><th scope="col">경로</th><th scope="col">기준 크기</th><th scope="col">받은 크기</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="pagination" hidden>
+        <button id="previous" type="button">이전</button><p id="page-label"></p><button id="next" type="button">다음</button>
+      </div>
+      <div class="exports">
+        <button id="save-reference" type="button" disabled>기준 목록 저장</button>
+        <button id="save-received" type="button" disabled>받은 목록 저장</button>
+        <button id="save-report" class="primary" type="button" disabled>결과 저장</button>
+        <button id="reset" class="plain" type="button">초기화</button>
+      </div>
+    </section>
+    <details id="limits">
+      <summary>비교 범위와 사용법</summary>
+      <p>원본에서 ‘기준 목록 저장’을 누르고, 다른 기기에서 그 JSON을 ‘목록 불러오기’로 열면 원본 폴더 없이도 받은 파일을 비교합니다. HTML과 JSON을 USB나 동기화 폴더로 옮겨 쓰세요.</p>
+      <p>같은 상대 경로와 파일 내용을 SHA-256으로 비교합니다. 복사·동기화·편집을 끝낸 뒤 폴더를 선택하세요. 숨김 파일도 브라우저가 제공하면 비교에 포함합니다.</p>
+      <p>빈 폴더, 수정 시각, 접근 권한, 영상·디자인의 완성도, AE·Blender의 연결 자산은 검사하지 않습니다. ZIP은 풀어서 선택하세요. 브라우저는 심볼릭 링크·정션 여부를 구별하지 못하므로 링크 검사에는 기존 delivery_manifest.py를 사용하세요.</p>
+      <p>이름의 대소문자나 한글 표기 방식(NFC/NFD)이 다르면 별도 파일로 표시합니다. 목록은 최대 32 MiB, 파일은 200,000개까지 지원합니다. 최신 데스크톱 브라우저를 권장합니다.</p>
+      <p>파일 목록과 결과 JSON에는 파일명·크기·해시가 들어 있습니다. 개인 자료의 목록도 개인 기기에만 보관하세요. 이 페이지는 결과를 따로 저장하거나 업로드하지 않으며, 닫으면 선택한 파일과 결과가 사라집니다.</p>
+    </details>
+    <details><summary>라이선스와 버전</summary><p>파일 비교 0.1.0 · designer-skills · 오프라인 도구</p><pre>THIRD_PARTY_NOTICES</pre></details>
+    <noscript><p>이 도구는 브라우저의 JavaScript가 필요합니다.</p></noscript>
+    <p id="announcer" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+  </main>
+  <script>/* APP_SCRIPT */</script>
+</body>
+</html>
