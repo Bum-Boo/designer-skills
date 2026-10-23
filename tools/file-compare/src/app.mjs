@@ -1,4 +1,5 @@
-import { prepareFiles, validateManifest, decodeManifest, compare, MAX_MANIFEST_BYTES } from './core.mjs';
+import { prepareFiles, validateManifest, decodeManifest, compare, MAX_MANIFEST_BYTES, visibleText } from './core.mjs';
+import { fileChunks } from './read-chunks.mjs';
 
 const $ = id => document.getElementById(id);
 const number = n => new Intl.NumberFormat('ko-KR').format(n);
@@ -12,15 +13,26 @@ const names = { reference: '기준', received: '받은 폴더' };
 const labels = { missing: '없음', extra: '추가', changed: '변경', same: '같음' };
 const state = { reference: null, received: null, referenceSource: 'folder', result: null,
   active: null, generation: 0, error: '', messages: {}, filter: 'all', page: 0, zeroConfirmed: false };
-let worker = null, workerURL = null;
+let worker = null, workerURL = null, pending = null, requestId = 0;
 const PAGE_SIZE = 50;
 
 function stop() {
   state.generation++;
+  if (pending) { pending.reject(new Error('확인을 취소했습니다.')); pending = null; }
   worker?.terminate(); worker = null;
   if (workerURL) URL.revokeObjectURL(workerURL);
   workerURL = null;
   state.active = null;
+}
+
+function request(type, payload = {}, transfer = []) {
+  return new Promise((resolve, reject) => {
+    if (!worker || pending) { reject(new Error('파일 확인 작업을 시작하지 못했습니다.')); return; }
+    const id = ++requestId;
+    pending = { id, resolve, reject };
+    try { worker.postMessage({ runId: state.generation, id, type, ...payload }, transfer); }
+    catch (error) { pending = null; reject(error); }
+  });
 }
 
 function clearVerdict() {
@@ -79,17 +91,34 @@ async function pick(side, files) {
     workerURL = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: 'text/javascript' }));
     worker = new Worker(workerURL);
     worker.onmessage = ({ data }) => {
-      if (data.runId !== state.generation || !state.active) return;
-      if (data.type === 'progress') {
-        Object.assign(state.active, { done: data.done, total: data.total });
-        renderProgress();
-      } else if (data.type === 'done') complete(runId, data.manifest);
-      else if (data.type === 'error') fail(runId, data.message);
+      if (data.runId !== state.generation || !state.active || pending?.id !== data.id) return;
+      const waiting = pending; pending = null;
+      if (data.type === 'error') waiting.reject(new Error(data.message));
+      else waiting.resolve(data.result);
     };
     worker.onerror = event => { event.preventDefault(); fail(runId, '파일을 읽는 도중 오류가 났습니다.'); };
     worker.onmessageerror = () => fail(runId, '파일 데이터를 전달하지 못했습니다.');
-    worker.postMessage({ runId, ...prepared });
     render();
+    await request('start', { target: prepared.target, fileCount: prepared.items.length });
+    let lastProgress = 0;
+    for (const { file, path } of prepared.items) {
+      if (runId !== state.generation) return;
+      await request('file', { path, bytes: file.size });
+      try {
+        for await (const buffer of fileChunks(file)) {
+          if (runId !== state.generation) return;
+          const bytes = buffer.byteLength;
+          await request('chunk', { buffer }, [buffer]);
+          if (runId !== state.generation) return;
+          state.active.done += bytes;
+          if (Date.now() - lastProgress > 250) { renderProgress(); lastProgress = Date.now(); }
+        }
+      } catch (error) { throw new Error(`${path}: ${error.message}`); }
+      if (runId !== state.generation) return;
+      await request('file-end');
+    }
+    if (runId !== state.generation) return;
+    complete(runId, await request('finish'));
   } catch (error) { fail(runId, error.message); }
 }
 
@@ -97,6 +126,7 @@ async function importManifest(file) {
   const runId = begin('reference', 'import');
   state.referenceSource = 'manifest';
   try {
+    if (!file) throw new Error('선택한 파일 목록이 없습니다.');
     if (file.size > MAX_MANIFEST_BYTES) throw new Error('목록 파일은 32 MiB까지 불러옵니다.');
     const buffer = await file.arrayBuffer();
     if (runId !== state.generation) return;
@@ -122,13 +152,13 @@ function render() {
   for (const id of ['pick-reference', 'import-reference', 'pick-received']) $(id).disabled = busy;
   for (const side of ['reference', 'received']) {
     const m = state[side];
-    $(side + '-summary').textContent = m ? `${m.target} · ${number(m.file_count)}개 파일 · ${size(m.total_bytes)}` : state.messages[side] ||
+    $(side + '-summary').textContent = m ? `${visibleText(m.target)} · ${number(m.file_count)}개 파일 · ${size(m.total_bytes)}` : state.messages[side] ||
       (side === 'reference' ? '원본 폴더나 저장한 파일 목록(JSON)을 고르세요.' : '다른 기기로 옮겼거나 전달받은 폴더를 고르세요.');
   }
   $('work').hidden = !busy;
   renderProgress();
   $('error').hidden = !state.error;
-  $('error').textContent = state.error;
+  $('error').textContent = visibleText(state.error);
   const result = state.result, zeros = zeroCount();
   const needsZeroCheck = Boolean(result?.comparison.match && zeros && !state.zeroConfirmed);
   $('verdict').textContent = result ? needsZeroCheck ? '0바이트 파일 확인 필요' : result.comparison.match ? '일치' : '차이 있음' : busy ? '파일 내용을 확인하고 있습니다…' : state.error ? '비교 미완료' : '두 쪽을 고르면 비교 결과가 나옵니다.';
@@ -153,8 +183,10 @@ function renderRows() {
   for (const row of rows.slice(state.page * PAGE_SIZE, (state.page + 1) * PAGE_SIZE)) {
     const tr = document.createElement('tr'); tr.dataset.status = row.status;
     const status = document.createElement('td'); status.textContent = labels[row.status]; tr.append(status);
-    const path = document.createElement('td'); path.className = 'path'; path.textContent = row.path;
+    const path = document.createElement('td'); path.className = 'path'; path.textContent = visibleText(row.path);
     if (row.note) { const note = document.createElement('span'); note.className = 'note'; note.textContent = row.note; path.append(note); }
+    const mobileSizes = document.createElement('span'); mobileSizes.className = 'mobile-sizes';
+    mobileSizes.textContent = `기준 ${size(row.reference?.bytes)} / 받은 ${size(row.received?.bytes)}`; path.append(mobileSizes);
     tr.append(path);
     for (const e of [row.reference, row.received]) { const cell = document.createElement('td'); cell.textContent = size(e?.bytes); tr.append(cell); }
     fragment.append(tr);
@@ -176,12 +208,16 @@ function save(manifest, suffix, extra = {}) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-for (const side of ['reference', 'received']) {
-  $('pick-' + side).onclick = () => { const input = $(side + '-files'); input.value = ''; input.click(); };
-  $(side + '-files').onchange = event => { if (event.target.files.length) pick(side, event.target.files); };
+function selectInput(side, input) {
+  stop(); state[side] = null; state.error = ''; state.messages[side] = '';
+  clearVerdict(); render(); input.value = ''; input.click();
 }
-$('import-reference').onclick = () => { $('manifest-file').value = ''; $('manifest-file').click(); };
-$('manifest-file').onchange = event => { if (event.target.files[0]) importManifest(event.target.files[0]); };
+for (const side of ['reference', 'received']) {
+  $('pick-' + side).onclick = () => selectInput(side, $(side + '-files'));
+  $(side + '-files').onchange = event => pick(side, event.target.files);
+}
+$('import-reference').onclick = () => selectInput('reference', $('manifest-file'));
+$('manifest-file').onchange = event => importManifest(event.target.files[0]);
 $('cancel').onclick = () => {
   const side = state.active?.side;
   stop(); clearVerdict();

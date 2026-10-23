@@ -53,6 +53,12 @@ export function safeLabel(value, fallback = '폴더') {
   return typeof value === 'string' ? value.split(/[\\/]/).filter(Boolean).at(-1)?.slice(0, 200) || fallback : fallback;
 }
 
+export function visibleText(value) {
+  // Preserve exact paths in comparison/export; expose invisible display controls.
+  return value.replace(/[\p{Bidi_Control}\p{Default_Ignorable_Code_Point}]/gu,
+    c => `⟨U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}⟩`);
+}
+
 export function validateManifest(value) {
   if (!own(value) || value.schema_version !== 1) {
     throw new Error('schema_version이 1인 파일 목록(JSON)이 필요합니다.');

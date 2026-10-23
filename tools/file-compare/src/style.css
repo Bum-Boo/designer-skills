@@ -45,7 +45,8 @@ th { text-align:left; font-size:15px; font-weight:500; background:var(--tint); }
 td,th { padding:12px 16px; border-bottom:1px solid var(--soft); vertical-align:top; }
 th:first-child,td:first-child { padding-left:12px; width:80px; white-space:nowrap; }
 th:nth-child(n+3),td:nth-child(n+3) { text-align:right; width:124px; white-space:nowrap; }
-td.path { overflow-wrap:anywhere; word-break:break-word; }
+td.path { overflow-wrap:anywhere; word-break:break-word; unicode-bidi:plaintext; }
+.mobile-sizes { display:none; }
 .note { display:block; color:var(--muted); font-size:14px; margin-top:4px; }
 tr[data-status=missing] td:first-child,tr[data-status=changed] td:first-child { color:var(--danger); }
 #pagination:not([hidden]) { display:flex; align-items:center; justify-content:center; gap:16px; margin-top:16px; font-size:15px; }
@@ -59,5 +60,5 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:
 .skip:focus { transform:translateY(0); }
 [hidden] { display:none !important; }
 @media(max-width:959px) { .source-row { grid-template-columns:100px minmax(0,1fr); } .source-row p { grid-column:2; } }
-@media(max-width:639px) { main { padding:24px 16px 48px; } h1 { font-size:24px; } .source-row { grid-template-columns:minmax(0,1fr); gap:12px; } .source-row p { grid-column:auto; } #verdict { font-size:20px; } .search-line input { flex:1; width:160px; } .search-line p { flex-basis:100%; } table { min-width:540px; } td,th { padding:12px 8px; } .exports button { flex:1 1 auto; } }
+@media(max-width:639px) { main { padding:24px 16px 48px; } h1 { font-size:24px; } .source-row { grid-template-columns:minmax(0,1fr); gap:12px; } .source-row p { grid-column:auto; } #verdict { font-size:20px; } .search-line input { flex:1; width:160px; } .search-line p { flex-basis:100%; } table { min-width:0; } td,th { padding:12px 8px; } th:nth-child(n+3),td:nth-child(n+3) { display:none; } .mobile-sizes { display:block; margin-top:4px; color:var(--muted); font-size:14px; } .exports button { flex:1 1 auto; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
