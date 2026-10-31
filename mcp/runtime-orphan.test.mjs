@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtemp, readdir, readFile, rm, writeFile, chmod} from 'node:fs/promises';
+import {chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {setTimeout as pause} from 'node:timers/promises';
@@ -67,31 +67,42 @@ test('tools stop after the server process group is SIGKILLed', linux, async t =>
 
 test('startup sweep stops tools recorded by a dead server and leaves reused PIDs alone', linux, async t => {
   const {state, owned} = await scratch(t, 'designer-sweep-');
+  const tree = new ProcessTree();
+  const sleeper = () => { const child = spawn('sleep', ['30'], {detached: true, stdio: 'ignore'}); owned.push(child.pid); return child; };
   const ghost = spawn(process.execPath, ['-e', ''], {stdio: 'ignore'});
-  const ghostStarted = Date.now();
+  const ghostStarted = tree.now();
   await new Promise(resolve => ghost.once('exit', resolve));
-  const stale = spawn('sleep', ['30'], {detached: true, stdio: 'ignore'});
-  const reused = spawn('sleep', ['30'], {detached: true, stdio: 'ignore'});
-  const live = spawn('sleep', ['30'], {detached: true, stdio: 'ignore'});
-  owned.push(stale.pid, reused.pid, live.pid);
-  const now = Date.now();
-  await (await import('node:fs/promises')).mkdir(state, {mode: 0o700});
-  const record = (server, tools) => JSON.stringify({version: 1, server, tools});
-  await writeFile(path.join(state, `server-${ghost.pid}-${ghostStarted}.json`), record({pid: ghost.pid, startedAt: ghostStarted}, [
+  const liveServer = sleeper(), liveStarted = tree.now();
+  const stale = sleeper(), reused = sleeper(), live = sleeper(), otherBoot = sleeper();
+  // The leader of this group exits at once and leaves its sleep running.
+  const orphaned = spawn('/bin/sh', ['-c', 'sleep 30 & exit 0'], {detached: true, stdio: 'ignore'});
+  await new Promise(resolve => orphaned.once('exit', resolve));
+  const now = tree.now();
+  await mkdir(state, {mode: 0o700});
+  const write = (name, boot, server, tools) => writeFile(path.join(state, name), JSON.stringify({version: 2, boot, server, tools}));
+  await write(`server-${ghost.pid}-1.json`, tree.boot(), {pid: ghost.pid, startedAt: ghostStarted}, [
     {pid: stale.pid, spawnedAt: now, grouped: true},
     // Recorded a minute earlier than the process now holding that PID was created.
-    {pid: reused.pid, spawnedAt: now - 60000, grouped: true}]));
-  const self = Date.now() - process.uptime() * 1000;
-  await writeFile(path.join(state, `server-${process.pid}-${Math.round(self)}.json`),
-    record({pid: process.pid, startedAt: self}, [{pid: live.pid, spawnedAt: now, grouped: true}]));
-  await writeFile(path.join(state, 'server-2-3.json'), '{"version": 1, "server": []}');
+    {pid: reused.pid, spawnedAt: now - 60000, grouped: true},
+    // Its own process is gone, so the remaining group member cannot be told apart from a reused group.
+    {pid: orphaned.pid, spawnedAt: now, grouped: true, exitedAt: now}]);
+  await write(`server-${liveServer.pid}-2.json`, tree.boot(), {pid: liveServer.pid, startedAt: liveStarted},
+    [{pid: live.pid, spawnedAt: now, grouped: true}]);
+  await write(`server-${ghost.pid}-3.json`, 'an-earlier-boot', {pid: ghost.pid, startedAt: ghostStarted},
+    [{pid: otherBoot.pid, spawnedAt: now, grouped: true}]);
+  await writeFile(path.join(state, 'server-2-4.json'), '{"version": 1, "server": []}');
   await chmod(state, 0o700);
-  const stopped = await sweepStale({directory: state, tree: new ProcessTree()});
+  const groupMember = (await tree.snapshot()).find(row => row.pgid === orphaned.pid);
+  assert.ok(groupMember, 'the orphaned group member is running');
+  owned.push(groupMember.pid);
+  const stopped = await sweepStale({directory: state, tree});
   assert.deepEqual(stopped.map(row => row.pid), [stale.pid]);
   assert.ok(await until(async () => !(await running(stale.pid))));
   assert.equal(await running(reused.pid), true, 'a PID with a different start time is not ours');
+  assert.equal(await running(groupMember.pid), true, 'a stale record does not claim members of a leaderless group');
   assert.equal(await running(live.pid), true, 'records of a running server are left alone');
-  assert.deepEqual((await readdir(state)).sort(), [`server-${process.pid}-${Math.round(self)}.json`]);
+  assert.equal(await running(otherBoot.pid), true, 'records from another boot are never acted on');
+  assert.deepEqual(await readdir(state), [`server-${liveServer.pid}-2.json`]);
 });
 
 test('closing a runtime removes its pid file and stops its reaper', linux, async t => {
@@ -128,4 +139,22 @@ test('real MCP server: SIGKILL during a tool call does not orphan the tool', lin
   assert.equal(await running(pid), true);
   process.kill(transport.pid, 'SIGKILL');
   assert.ok(await until(async () => !(await running(pid))), 'tool descendant must stop after the server is SIGKILLed');
+});
+
+test('server and tool identity on Linux ignores wall-clock jumps', linux, async t => {
+  const {state, owned} = await scratch(t, 'designer-clock-');
+  const {ToolRegistry, isAlive, selectTargets} = await import('./process-tree.mjs');
+  const tree = new ProcessTree();
+  const registry = new ToolRegistry({directory: state, tree, startReaper: false});
+  t.after(() => registry.close());
+  const tool = spawn('sleep', ['30'], {detached: true, stdio: 'ignore'});
+  owned.push(tool.pid);
+  const entry = {pid: tool.pid, spawnedAt: tree.now(), grouped: true};
+  const realNow = Date.now;
+  Date.now = () => realNow() + 3600000; // As after a host resume or a manual clock change.
+  try {
+    const rows = await tree.snapshot();
+    assert.equal(isAlive(rows, registry.server), true, 'this server is still recognised');
+    assert.deepEqual(selectTargets(rows, entry, {orphans: false, now: tree.now()}).pids, [tool.pid]);
+  } finally { Date.now = realNow; }
 });

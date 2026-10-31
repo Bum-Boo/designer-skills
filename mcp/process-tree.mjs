@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-// Process start times are compared with the moment a tool was spawned. ps and /proc report
-// whole seconds, so allow a few seconds either side while still rejecting reused PIDs.
+// Process start times are compared with the moment a tool was spawned, using the clock the
+// platform reports start times in: boot-relative on Linux, wall time elsewhere. Allow a few
+// seconds either side for second-resolution reports while still rejecting reused PIDs.
 export const START_TOLERANCE = 5000;
 const USER_HZ = 100; // Linux reports /proc starttime in USER_HZ, fixed at 100 on supported architectures.
 const reaperScript = fileURLToPath(new URL('./reaper.mjs', import.meta.url));
@@ -14,9 +15,9 @@ const system32 = name => path.join(process.env.SystemRoot || 'C:\\Windows', 'Sys
 const TASKKILL = system32('taskkill.exe');
 const POWERSHELL = system32('WindowsPowerShell\\v1.0\\powershell.exe');
 // Windows does not reparent orphans, so ParentProcessId still names a wrapper that has exited.
-const WINDOWS_SNAPSHOT = "$ErrorActionPreference='Stop'; Get-CimInstance Win32_Process | ForEach-Object { " +
-  "if ($_.CreationDate) { '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, " +
-  "([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } }";
+// WMI keeps CreationDate as a DMTF string with its UTC offset, which stays unambiguous across DST.
+const WINDOWS_SNAPSHOT = "$ErrorActionPreference='Stop'; Get-WmiObject Win32_Process | ForEach-Object { " +
+  "'{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $_.CreationDate }";
 
 export function execText(file, args, {timeout = 15000} = {}) {
   return new Promise(resolve => {
@@ -26,64 +27,90 @@ export function execText(file, args, {timeout = 15000} = {}) {
   });
 }
 
-export function parseLinuxStat(text, bootMs) {
+/** Start time in milliseconds since boot. */
+export function parseLinuxStat(text) {
   const close = text.lastIndexOf(')');
   const fields = text.slice(close + 2).trim().split(/\s+/);
   return {pid: Number(text.slice(0, text.indexOf(' '))), state: fields[0], ppid: Number(fields[1]),
-    pgid: Number(fields[2]), start: bootMs + Number(fields[19]) * 1000 / USER_HZ};
+    pgid: Number(fields[2]), start: Number(fields[19]) * 1000 / USER_HZ};
 }
 
-export function parsePsSnapshot(text) {
+/** `ps -o etime` is elapsed time ([[dd-]hh:]mm:ss), independent of time zone and DST. */
+export function parseElapsed(text) {
+  const match = /^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$/.exec(text.trim());
+  if (!match) return NaN;
+  const [days, hours, minutes, seconds] = match.slice(1).map(value => Number(value ?? 0));
+  return (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
+}
+
+export function parsePsSnapshot(text, now) {
   const rows = [];
   for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S.*\S)\s*$/.exec(line);
-    if (!match) continue;
-    const start = Date.parse(match[4]);
-    if (Number.isFinite(start)) rows.push({pid: Number(match[1]), ppid: Number(match[2]), pgid: Number(match[3]), start});
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s*$/.exec(line);
+    const elapsed = match ? parseElapsed(match[4]) : NaN;
+    if (Number.isFinite(elapsed)) rows.push({pid: Number(match[1]), ppid: Number(match[2]), pgid: Number(match[3]), start: now - elapsed});
   }
   return rows;
+}
+
+/** DMTF datetime, e.g. 20261101013000.123456-300: local time and its UTC offset in minutes. */
+export function parseDmtf(text) {
+  const match = /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)\.(\d{6})([+-]\d{3})$/.exec(text);
+  if (!match) return NaN;
+  const [year, month, day, hour, minute, second, micro, offset] = match.slice(1).map(Number);
+  return Date.UTC(year, month - 1, day, hour, minute, second, Math.floor(micro / 1000)) - offset * 60000;
 }
 
 export function parseWindowsSnapshot(text) {
   const rows = [];
   for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(\d+)\s+(\d+)\s+(-?\d+)\s*$/.exec(line);
-    if (match) rows.push({pid: Number(match[1]), ppid: Number(match[2]), pgid: null, start: Number(match[3])});
+    const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s*$/.exec(line);
+    const start = match ? parseDmtf(match[3]) : NaN;
+    if (Number.isFinite(start)) rows.push({pid: Number(match[1]), ppid: Number(match[2]), pgid: null, start});
   }
   return rows;
 }
 
 async function linuxSnapshot() {
-  const boot = /^btime\s+(\d+)$/m.exec(await readFile('/proc/stat', 'utf8'));
-  if (!boot) throw new Error('Linux boot time unavailable');
   const rows = [];
   for (const name of await readdir('/proc')) {
     if (!/^\d+$/.test(name)) continue;
-    try { rows.push(parseLinuxStat(await readFile(`/proc/${name}/stat`, 'utf8'), Number(boot[1]) * 1000)); }
+    try { rows.push(parseLinuxStat(await readFile(`/proc/${name}/stat`, 'utf8'))); }
     catch (error) { if (!['ENOENT', 'ESRCH', 'EACCES'].includes(error.code)) throw error; }
   }
   return rows;
 }
 
-/** Select the processes that still belong to a recorded tool launch; never a reused PID. */
-export function selectTargets(rows, entry, {exclude = []} = {}) {
-  const near = row => Math.abs(row.start - entry.spawnedAt) <= START_TOLERANCE;
-  const later = row => row.start >= entry.spawnedAt - START_TOLERANCE;
+/**
+ * Select the processes that still belong to a recorded tool launch; never a reused PID.
+ * When the launched process itself is gone, its group or children are trusted only with
+ * `orphans` (cleanup right after the owner stopped) and only within when they could have started.
+ */
+export function selectTargets(rows, entry, {exclude = [], orphans = true, now = Infinity} = {}) {
+  const none = reused => ({group: null, pids: [], reused});
   const skip = new Set([0, 1, ...exclude]);
   const leader = rows.find(row => row.pid === entry.pid);
-  if (leader && !near(leader)) return {group: null, pids: [], reused: true};
+  if (leader && Math.abs(leader.start - entry.spawnedAt) > START_TOLERANCE) return none(true);
+  if (!leader && !orphans) return none(false);
+  const earliest = entry.spawnedAt - START_TOLERANCE;
   if (entry.grouped) {
-    // A live group ID cannot be reassigned, so remaining members are ours even after the leader exits.
-    const members = rows.filter(row => row.pgid === entry.pid && later(row) && !skip.has(row.pid));
+    // A group ID cannot be reassigned while any member is alive.
+    const members = rows.filter(row => row.pgid === entry.pid && row.start >= earliest &&
+      row.start <= now + START_TOLERANCE && !skip.has(row.pid));
     return {group: members.length ? entry.pid : null, pids: members.map(row => row.pid), reused: false};
   }
+  // A child starts after its parent and, for a parent that has exited, before that exit.
   const pids = leader ? [leader.pid] : [];
-  const queue = [entry.pid], seen = new Set(queue);
+  const starts = new Map([[entry.pid, leader ? leader.start : entry.spawnedAt]]);
+  const latest = leader ? Infinity : (entry.exitedAt ?? now) + START_TOLERANCE;
+  const queue = [entry.pid];
   while (queue.length) {
     const parent = queue.shift();
     for (const row of rows) {
-      if (row.ppid !== parent || seen.has(row.pid) || skip.has(row.pid) || !later(row)) continue;
-      seen.add(row.pid);
+      if (row.ppid !== parent || starts.has(row.pid) || skip.has(row.pid)) continue;
+      if (row.start < Math.max(earliest, starts.get(parent) - START_TOLERANCE)) continue;
+      if (parent === entry.pid && row.start > latest) continue;
+      starts.set(row.pid, row.start);
       pids.push(row.pid);
       queue.push(row.pid);
     }
@@ -98,15 +125,31 @@ export function isAlive(rows, {pid, startedAt}) {
 /** Platform-specific termination of a launched tool and the processes it started. */
 export class ProcessTree {
   constructor({platform = process.platform, exec = execText, kill = (pid, signal) => process.kill(pid, signal),
-    snapshot, wait = ms => new Promise(resolve => setTimeout(resolve, ms))} = {}) {
+    snapshot, now, wait = ms => new Promise(resolve => setTimeout(resolve, ms))} = {}) {
     this.platform = platform;
     this.exec = exec;
     this.kill = kill;
     this.wait = wait;
     this.snapshotImpl = snapshot;
+    this.nowImpl = now;
   }
   /** POSIX tools run in their own process group; Windows tools are tracked by parent process ID. */
   get grouped() { return this.platform !== 'win32'; }
+  /** Current time on the clock that snapshots report start times in. */
+  now() {
+    if (this.nowImpl) return this.nowImpl();
+    // The boot clock matches /proc starttime and does not move when the wall clock is set.
+    return this.platform === 'linux' ? os.uptime() * 1000 : Date.now();
+  }
+  /** Identifies the current boot so records from before a restart are never acted on. */
+  boot() {
+    if (this.platform === 'linux') return readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    return String(Math.round(Date.now() / 1000 - os.uptime()));
+  }
+  sameBoot(recorded) {
+    if (this.platform === 'linux') return recorded === this.boot();
+    return Math.abs(Number(recorded) - Number(this.boot())) <= 120;
+  }
   async snapshot() {
     if (this.snapshotImpl) return this.snapshotImpl();
     if (this.platform === 'linux') return linuxSnapshot();
@@ -115,27 +158,28 @@ export class ProcessTree {
       if (result.code !== 0) throw new Error(`Process snapshot failed: ${result.stderr.trim() || result.code}`);
       return parseWindowsSnapshot(result.stdout);
     }
-    const result = await this.exec('ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart=']);
+    const result = await this.exec('ps', ['-A', '-o', 'pid=,ppid=,pgid=,etime=']);
     if (result.code !== 0) throw new Error(`Process snapshot failed: ${result.stderr.trim() || result.code}`);
-    return parsePsSnapshot(result.stdout);
+    return parsePsSnapshot(result.stdout, this.now());
   }
-  /** Signal a running child. Returns a synchronous error to report; Windows work continues asynchronously. */
-  signal(child, spawnedAt, force) {
-    if (!child.pid) return;
-    if (!this.grouped) {
-      this.stopWindows(child, spawnedAt).catch(() => {});
-      return;
-    }
+  /**
+   * Signal a running child. POSIX returns {error} for an unexpected failure. Windows returns
+   * {pending}: it resolves once the tree is stopped and rejects if that could not be confirmed.
+   */
+  signal(child, launch, force) {
+    if (!child.pid) return {};
+    if (!this.grouped) return {pending: this.stopWindows(child, launch)};
     try { this.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM'); }
-    catch (error) { if (error.code !== 'ESRCH') return error; }
+    catch (error) { if (error.code !== 'ESRCH') return {error}; }
+    return {};
   }
-  async stopWindows(child, spawnedAt) {
+  async stopWindows(child, {spawnedAt, exitedAt}) {
     const exited = child.exitCode !== null || child.signalCode !== null;
     if (!exited && (await this.exec(TASKKILL, ['/PID', String(child.pid), '/T', '/F'])).code === 0) return;
     // taskkill cannot walk from a wrapper that already exited; find descendants by recorded parent ID.
     if (!exited) { try { child.kill(); } catch {} }
-    const {pids} = selectTargets(await this.snapshot(), {pid: child.pid, spawnedAt, grouped: false},
-      {exclude: [process.pid]});
+    const {pids} = selectTargets(await this.snapshot(), {pid: child.pid, spawnedAt, grouped: false, exitedAt},
+      {exclude: [process.pid], now: this.now()});
     await this.taskkill(pids.filter(pid => pid !== child.pid || !exited));
   }
   async taskkill(pids) {
@@ -143,26 +187,33 @@ export class ProcessTree {
       await this.exec(TASKKILL, ['/F', ...pids.slice(i, i + 32).flatMap(pid => ['/PID', String(pid)])]);
     }
   }
+  identify(rows, tools, orphans) {
+    const now = this.now();
+    return tools.map(tool => ({tool, ...selectTargets(rows, tool, {exclude: [process.pid], orphans, now})}))
+      .filter(targets => targets.pids.length);
+  }
   /** Stop every recorded tool launch that is still identifiable. */
-  async reap(tools) {
+  async reap(tools, {orphans = true} = {}) {
     if (!tools.length) return [];
     const rows = await this.snapshot();
-    const stopped = [];
-    const groups = [];
-    for (const tool of tools) {
-      const targets = selectTargets(rows, tool, {exclude: [process.pid]});
-      if (!targets.pids.length) continue;
-      stopped.push({pid: tool.pid, pids: targets.pids});
-      if (this.grouped) groups.push(targets.group);
-      else await this.taskkill(targets.pids);
+    const found = this.identify(rows, tools, orphans);
+    if (this.grouped) {
+      for (const {group} of found) { try { this.kill(-group, 'SIGTERM'); } catch {} }
+      if (found.length) {
+        const seen = new Map(rows.map(row => [row.pid, row.start]));
+        await this.wait(500);
+        // Escalate only while a process identified above is still in the group; an ID reused since is left alone.
+        const after = await this.snapshot();
+        for (const {group, pids} of found) {
+          const remaining = after.some(row => row.pgid === group && pids.includes(row.pid) &&
+            Math.abs(row.start - seen.get(row.pid)) <= START_TOLERANCE);
+          if (remaining) { try { this.kill(-group, 'SIGKILL'); } catch {} }
+        }
+      }
+    } else {
+      for (const {pids} of found) await this.taskkill(pids);
     }
-    if (groups.length) {
-      const send = signal => { for (const group of groups) { try { this.kill(-group, signal); } catch {} } };
-      send('SIGTERM');
-      await this.wait(500);
-      send('SIGKILL');
-    }
-    return stopped;
+    return found.map(({tool, pids}) => ({pid: tool.pid, pids}));
   }
 }
 
@@ -181,9 +232,10 @@ function privateDirectory(directory) {
 
 function validRecord(value) {
   const id = n => Number.isSafeInteger(n) && n > 1;
-  return value && typeof value === 'object' && value.version === 1 && value.server && id(value.server.pid) &&
-    Number.isFinite(value.server.startedAt) && Array.isArray(value.tools) &&
-    value.tools.every(tool => tool && id(tool.pid) && Number.isFinite(tool.spawnedAt) && typeof tool.grouped === 'boolean');
+  return value && typeof value === 'object' && value.version === 2 && typeof value.boot === 'string' &&
+    value.server && id(value.server.pid) && Number.isFinite(value.server.startedAt) && Array.isArray(value.tools) &&
+    value.tools.every(tool => tool && id(tool.pid) && Number.isFinite(tool.spawnedAt) && typeof tool.grouped === 'boolean' &&
+      (tool.exitedAt === undefined || Number.isFinite(tool.exitedAt)));
 }
 
 export function readRecord(file) {
@@ -200,16 +252,18 @@ export class ToolRegistry {
   constructor({directory = defaultStateDirectory(), tree = new ProcessTree(), startReaper = true} = {}) {
     privateDirectory(directory);
     this.directory = directory;
-    this.server = {pid: process.pid, startedAt: Date.now() - process.uptime() * 1000};
-    this.file = path.join(directory, `server-${process.pid}-${Math.round(this.server.startedAt)}.json`);
     this.tree = tree;
+    this.boot = tree.boot();
+    this.server = {pid: process.pid, startedAt: tree.now() - process.uptime() * 1000};
+    this.file = path.join(directory, `server-${process.pid}-${Date.now()}.json`);
     this.tools = new Map();
     this.closed = false;
     this.startReaper = startReaper;
   }
   write() {
     const temp = this.file + '.tmp';
-    writeFileSync(temp, JSON.stringify({version: 1, server: this.server, tools: [...this.tools.values()]}), {mode: 0o600});
+    writeFileSync(temp, JSON.stringify({version: 2, boot: this.boot, server: this.server, tools: [...this.tools.values()]}),
+      {mode: 0o600});
     renameSync(temp, this.file);
   }
   add(tool) {
@@ -219,6 +273,12 @@ export class ToolRegistry {
       this.write();
       if (this.startReaper && !this.reaper) this.spawnReaper();
     } catch {}
+  }
+  update(pid, fields) {
+    const tool = this.tools.get(pid);
+    if (!tool || this.closed) return;
+    Object.assign(tool, fields);
+    try { this.write(); } catch {}
   }
   delete(pid) {
     if (!this.tools.delete(pid) || this.closed) return;
@@ -258,9 +318,28 @@ export async function sweepStale({directory = defaultStateDirectory(), tree = ne
       try { unlinkSync(file); } catch {}
       continue;
     }
-    if (record.server.pid === process.pid || isAlive(rows, record.server)) continue;
-    stopped.push(...await tree.reap(record.tools));
+    if (record.server.pid === process.pid) continue;
+    // Start times from another boot are meaningless; such records are dropped without signalling.
+    if (tree.sameBoot(record.boot)) {
+      if (isAlive(rows, record.server)) continue;
+      // Long after its owner died, only a launched process that is itself still running is trusted.
+      stopped.push(...await tree.reap(record.tools, {orphans: false}));
+    }
     try { unlinkSync(file); } catch {}
   }
   return stopped;
+}
+
+/** Reaper action for one server's record. A record that could not be acted on is kept for a startup sweep. */
+export async function reapFile(file, tree = new ProcessTree()) {
+  let record;
+  try { record = readRecord(file); }
+  catch (error) {
+    if (error.code !== 'ENOENT') try { unlinkSync(file); } catch {}
+    return {kept: false};
+  }
+  try { await tree.reap(record.tools); }
+  catch { return {kept: true}; }
+  try { unlinkSync(file); } catch {}
+  return {kept: false};
 }

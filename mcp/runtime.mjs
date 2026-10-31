@@ -61,13 +61,18 @@ export class Runtime {
       const grouped = this.tree.grouped;
       const child = spawn(command, args, {cwd: this.workspace, shell: false, windowsHide: true, detached: grouped,
         stdio: ['ignore', 'pipe', 'pipe'], env: {...process.env, PYTHONUTF8: '1'}});
-      const spawnedAt = Date.now();
+      const launch = {pid: child.pid, spawnedAt: this.tree.now(), grouped};
       this.children.add(child);
-      if (child.pid) this.registry?.add({pid: child.pid, spawnedAt, grouped});
+      if (child.pid) this.registry?.add(launch);
       let stdout = '', stderr = '', failure, escalation, settled = false, stopping = false;
+      const pending = [];
       const signal = value => {
-        const error = this.tree.signal(child, spawnedAt, value === 'SIGKILL');
+        const {error, pending: stopped} = this.tree.signal(child, launch, value === 'SIGKILL');
         if (error) failure ??= error;
+        if (stopped) {
+          stopped.catch(() => {}); // Handled at finish; must not surface as an unhandled rejection.
+          pending.push(stopped);
+        }
       };
       const finish = code => {
         if (settled) return;
@@ -78,7 +83,8 @@ export class Runtime {
         if (stopping && grouped) signal('SIGKILL');
         this.children.delete(child);
         this.stoppers.delete(stop);
-        this.registry?.delete(child.pid);
+        // Keep the record until a Windows tree stop is confirmed, so the reaper can still retry it.
+        Promise.all(pending).then(() => this.registry?.delete(child.pid), () => {});
         if (failure) reject(failure);
         else if (!codes.includes(code)) reject(new Error(`Tool exited ${code}: ${(stderr || stdout).slice(-4000)}`));
         else resolve({code, stdout, stderr});
@@ -107,6 +113,11 @@ export class Runtime {
         stderr = (stderr + data.toString()).slice(-16384);
       });
       child.on('error', error => { failure ??= error; });
+      child.once('exit', () => {
+        // Bounds which processes can still be its children once its PID may be reused.
+        launch.exitedAt = this.tree.now();
+        this.registry?.update(child.pid, {exitedAt: launch.exitedAt});
+      });
       child.on('close', finish);
     });
   }
