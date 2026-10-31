@@ -6,6 +6,7 @@ import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
 import {z} from 'zod';
 import {Runtime} from './runtime.mjs';
+import {sweepStale} from './process-tree.mjs';
 import {createAeBridge} from './ae/bridge.mjs';
 
 export async function start(argv = process.argv.slice(2)) {
@@ -22,6 +23,11 @@ export async function start(argv = process.argv.slice(2)) {
   }
   if (!values.workspace) throw new Error('--workspace is required');
   const runtime = await Runtime.create(values.workspace, values);
+  if (runtime.registryError) console.error(`designer-tools: hard-kill tool cleanup disabled: ${runtime.registryError}`);
+  // Tools recorded by a server that was killed without cleanup; stopped in the background.
+  if (runtime.registry) sweepStale({directory: runtime.registry.directory, tree: runtime.tree}).then(stopped => {
+    if (stopped.length) console.error(`designer-tools: stopped ${stopped.length} tool launch(es) left by an earlier server`);
+  }, () => {});
   let ae, transport;
   const server = new McpServer({name: 'designer-tools', version: '0.2.0-alpha.1'});
   const result = async fn => {

@@ -3,6 +3,7 @@ import {realpath, lstat, mkdtemp, writeFile, readFile, rm} from 'node:fs/promise
 import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {ProcessTree, ToolRegistry} from './process-tree.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const delivery = path.join(ROOT, 'skills/asset-delivery/scripts/delivery_manifest.py');
@@ -11,10 +12,17 @@ const builder = path.join(ROOT, 'skills/blender-production/scripts/product_scene
 const inspector = path.join(ROOT, 'skills/blender-production/scripts/inspect_scene.py');
 
 export class Runtime {
-  constructor(workspace, {python = 'python', blender = 'blender'} = {}) {
+  constructor(workspace, {python = 'python', blender = 'blender', processTree = new ProcessTree(),
+    stateDirectory, registry = true} = {}) {
     this.workspace = workspace;
     this.python = python;
     this.blender = blender;
+    this.tree = processTree;
+    // Cleanup after a hard server kill is best effort; tools still run without a pid file.
+    if (registry) {
+      try { this.registry = new ToolRegistry({directory: stateDirectory, tree: processTree}); }
+      catch (error) { this.registryError = error.message; }
+    }
     this.children = new Set();
     this.stoppers = new Set();
     this.closed = false;
@@ -50,19 +58,16 @@ export class Runtime {
   async run(command, args, {timeout = 120000, codes = [0]} = {}) {
     if (this.closed) throw new Error('Runtime is closed');
     return await new Promise((resolve, reject) => {
-      const grouped = process.platform !== 'win32';
+      const grouped = this.tree.grouped;
       const child = spawn(command, args, {cwd: this.workspace, shell: false, windowsHide: true, detached: grouped,
         stdio: ['ignore', 'pipe', 'pipe'], env: {...process.env, PYTHONUTF8: '1'}});
+      const spawnedAt = Date.now();
       this.children.add(child);
+      if (child.pid) this.registry?.add({pid: child.pid, spawnedAt, grouped});
       let stdout = '', stderr = '', failure, escalation, settled = false, stopping = false;
       const signal = value => {
-        if (!child.pid) return;
-        try {
-          if (grouped) process.kill(-child.pid, value);
-          else child.kill(value);
-        } catch (error) {
-          if (error.code !== 'ESRCH') failure ??= error;
-        }
+        const error = this.tree.signal(child, spawnedAt, value === 'SIGKILL');
+        if (error) failure ??= error;
       };
       const finish = code => {
         if (settled) return;
@@ -73,6 +78,7 @@ export class Runtime {
         if (stopping && grouped) signal('SIGKILL');
         this.children.delete(child);
         this.stoppers.delete(stop);
+        this.registry?.delete(child.pid);
         if (failure) reject(failure);
         else if (!codes.includes(code)) reject(new Error(`Tool exited ${code}: ${(stderr || stdout).slice(-4000)}`));
         else resolve({code, stdout, stderr});
@@ -180,5 +186,6 @@ export class Runtime {
   close() {
     this.closed = true;
     for (const stop of this.stoppers) stop('Runtime closed while a tool was running; inspect partial output before retrying');
+    this.registry?.close();
   }
 }
