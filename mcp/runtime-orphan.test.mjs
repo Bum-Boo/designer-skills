@@ -90,7 +90,7 @@ test('startup sweep stops tools recorded by a dead server and leaves reused PIDs
     [{pid: live.pid, spawnedAt: now, grouped: true}]);
   await write(`server-${ghost.pid}-3.json`, 'an-earlier-boot', {pid: ghost.pid, startedAt: ghostStarted},
     [{pid: otherBoot.pid, spawnedAt: now, grouped: true}]);
-  await writeFile(path.join(state, 'server-2-4.json'), '{"version": 1, "server": []}');
+  await writeFile(path.join(state, 'server-2-4.json'), '{"server": []}');
   await chmod(state, 0o700);
   const groupMember = (await tree.snapshot()).find(row => row.pgid === orphaned.pid);
   assert.ok(groupMember, 'the orphaned group member is running');
@@ -157,4 +157,23 @@ test('server and tool identity on Linux ignores wall-clock jumps', linux, async 
     assert.equal(isAlive(rows, registry.server), true, 'this server is still recognised');
     assert.deepEqual(selectTargets(rows, entry, {orphans: false, now: tree.now()}).pids, [tool.pid]);
   } finally { Date.now = realNow; }
+});
+
+test('a virtualised /proc/uptime (lxcfs) does not disable identification on Linux', linux, async t => {
+  const {dir, state, owned} = await scratch(t, 'designer-lxcfs-');
+  const {Runtime} = await import('./runtime.mjs');
+  const {isAlive, selectTargets} = await import('./process-tree.mjs');
+  // A container's uptime is an hour shorter than the host boot clock that /proc/<pid>/stat uses.
+  const tree = new ProcessTree({now: () => os.uptime() * 1000 - 3600000});
+  const rt = await Runtime.create(dir, {processTree: tree, stateDirectory: state});
+  t.after(() => rt.close());
+  const marker = path.join(dir, 'child.pid');
+  rt.run('/bin/sh', ['-c', 'sleep 30 & printf "%s" "$!" > "$1"; wait', 'tool', marker], {timeout: 15000}).catch(() => {});
+  const pid = await readPid(marker);
+  owned.push(pid);
+  const [file] = (await readdir(state)).filter(name => name.endsWith('.json'));
+  const record = JSON.parse(await readFile(path.join(state, file), 'utf8'));
+  const rows = await tree.snapshot();
+  assert.equal(isAlive(rows, record.server), true);
+  assert.ok(selectTargets(rows, record.tools[0], {orphans: false}).pids.includes(pid));
 });

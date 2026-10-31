@@ -168,6 +168,47 @@ test('POSIX reaper escalates to KILL only while an identified member remains', a
   assert.deepEqual(sent, [[-4000, 'SIGTERM'], [-4500, 'SIGTERM'], 'wait', [-4000, 'SIGKILL']]);
 });
 
+test('POSIX reaper also kills a child forked during the grace period', async () => {
+  const sent = [];
+  const snapshots = [[{pid: 4100, ppid: 1, pgid: 4000, start: T + 100}],
+    // The identified member exited on TERM after forking a child that ignores TERM.
+    [{pid: 4600, ppid: 1, pgid: 4000, start: T + 400}]];
+  const tree = new ProcessTree({platform: 'darwin', kill: (pid, signal) => sent.push([pid, signal]), wait: async () => {},
+    snapshot: async () => snapshots.shift(), now: () => T + 200});
+  await tree.reap([{pid: 4000, spawnedAt: T, grouped: true}]);
+  assert.deepEqual(sent, [[-4000, 'SIGTERM'], [-4000, 'SIGKILL']]);
+});
+
+test('pid file entries are updated and removed only by the launch that owns them', async t => {
+  const {ToolRegistry} = await import('./process-tree.mjs');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'designer-registry-reuse-'));
+  t.after(() => rm(dir, {recursive: true, force: true}));
+  const registry = new ToolRegistry({directory: path.join(dir, 'state'), startReaper: false});
+  t.after(() => registry.close());
+  const first = {pid: 4000, spawnedAt: T, grouped: false};
+  const second = {pid: 4000, spawnedAt: T + 2000, grouped: false};
+  registry.add(first);
+  registry.add(second); // The PID was reused before the first launch's stop was confirmed.
+  registry.update(first, {exitedAt: T + 1});
+  registry.delete(first);
+  const tools = JSON.parse(await readFile(registry.file, 'utf8')).tools;
+  assert.deepEqual(tools, [second]);
+  registry.delete(second);
+  assert.deepEqual(JSON.parse(await readFile(registry.file, 'utf8')).tools, []);
+});
+
+test('records written by another version are left for that version', async t => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'designer-record-version-'));
+  t.after(() => rm(dir, {recursive: true, force: true}));
+  const file = path.join(dir, 'server-10-1.json');
+  const other = JSON.stringify({version: 3, future: true});
+  await writeFile(file, other);
+  assert.deepEqual(await reapFile(file, new ProcessTree({platform: 'win32', snapshot: async () => []})), {kept: true});
+  const {sweepStale} = await import('./process-tree.mjs');
+  assert.deepEqual(await sweepStale({directory: dir, tree: new ProcessTree({platform: 'win32', snapshot: async () => []})}), []);
+  assert.equal(await readFile(file, 'utf8'), other);
+});
+
 test('an unsafe state directory disables the pid file without blocking tools', {skip: process.platform === 'win32'}, async t => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'designer-state-mode-'));
   t.after(() => rm(dir, {recursive: true, force: true}));

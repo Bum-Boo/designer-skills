@@ -95,8 +95,7 @@ export function selectTargets(rows, entry, {exclude = [], orphans = true, now = 
   const earliest = entry.spawnedAt - START_TOLERANCE;
   if (entry.grouped) {
     // A group ID cannot be reassigned while any member is alive.
-    const members = rows.filter(row => row.pgid === entry.pid && row.start >= earliest &&
-      row.start <= now + START_TOLERANCE && !skip.has(row.pid));
+    const members = rows.filter(row => row.pgid === entry.pid && row.start >= earliest && !skip.has(row.pid));
     return {group: members.length ? entry.pid : null, pids: members.map(row => row.pid), reused: false};
   }
   // A child starts after its parent and, for a parent that has exited, before that exit.
@@ -140,6 +139,15 @@ export class ProcessTree {
     if (this.nowImpl) return this.nowImpl();
     // The boot clock matches /proc starttime and does not move when the wall clock is set.
     return this.platform === 'linux' ? os.uptime() * 1000 : Date.now();
+  }
+  /**
+   * Observed start of a process on the snapshot clock, or null where it is not cheaply available.
+   * Linux reads it directly, so containers whose /proc/uptime is virtualised (lxcfs) stay consistent.
+   */
+  startOf(pid) {
+    if (this.platform !== 'linux' || this.snapshotImpl) return null;
+    try { return parseLinuxStat(readFileSync(`/proc/${pid}/stat`, 'utf8')).start; }
+    catch { return null; }
   }
   /** Identifies the current boot so records from before a restart are never acted on. */
   boot() {
@@ -204,10 +212,14 @@ export class ProcessTree {
         await this.wait(500);
         // Escalate only while a process identified above is still in the group; an ID reused since is left alone.
         const after = await this.snapshot();
+        const checked = rows.reduce((latest, row) => Math.max(latest, row.start), -Infinity) - START_TOLERANCE;
         for (const {group, pids} of found) {
-          const remaining = after.some(row => row.pgid === group && pids.includes(row.pid) &&
-            Math.abs(row.start - seen.get(row.pid)) <= START_TOLERANCE);
-          if (remaining) { try { this.kill(-group, 'SIGKILL'); } catch {} }
+          const members = after.filter(row => row.pgid === group);
+          const original = members.some(row => pids.includes(row.pid) && Math.abs(row.start - seen.get(row.pid)) <= START_TOLERANCE);
+          // Members forked during the wait are ours too, unless a new process now leads a reused group ID.
+          const forked = members.length && members.every(row => row.start >= checked) &&
+            !members.some(row => row.pid === group);
+          if (original || forked) { try { this.kill(-group, 'SIGKILL'); } catch {} }
         }
       }
     } else {
@@ -240,6 +252,10 @@ function validRecord(value) {
 
 export function readRecord(file) {
   const value = JSON.parse(readFileSync(file, 'utf8'));
+  if (value && typeof value === 'object' && Number.isSafeInteger(value.version) && value.version !== 2) {
+    // Written by another release of this server; leave it to that release.
+    throw Object.assign(new Error('Process record from another version'), {code: 'EVERSION'});
+  }
   if (!validRecord(value)) throw new Error('Malformed process record');
   return value;
 }
@@ -254,7 +270,7 @@ export class ToolRegistry {
     this.directory = directory;
     this.tree = tree;
     this.boot = tree.boot();
-    this.server = {pid: process.pid, startedAt: tree.now() - process.uptime() * 1000};
+    this.server = {pid: process.pid, startedAt: tree.startOf(process.pid) ?? tree.now() - process.uptime() * 1000};
     this.file = path.join(directory, `server-${process.pid}-${Date.now()}.json`);
     this.tools = new Map();
     this.closed = false;
@@ -274,14 +290,15 @@ export class ToolRegistry {
       if (this.startReaper && !this.reaper) this.spawnReaper();
     } catch {}
   }
-  update(pid, fields) {
-    const tool = this.tools.get(pid);
-    if (!tool || this.closed) return;
-    Object.assign(tool, fields);
+  /** Update and delete take the launch object: a later launch may already hold a reused PID. */
+  update(launch, fields) {
+    if (this.tools.get(launch.pid) !== launch || this.closed) return;
+    Object.assign(launch, fields);
     try { this.write(); } catch {}
   }
-  delete(pid) {
-    if (!this.tools.delete(pid) || this.closed) return;
+  delete(launch) {
+    if (this.tools.get(launch.pid) !== launch || this.closed) return;
+    this.tools.delete(launch.pid);
     try { this.write(); } catch {}
   }
   spawnReaper() {
@@ -314,7 +331,7 @@ export async function sweepStale({directory = defaultStateDirectory(), tree = ne
     let record;
     try { record = readRecord(file); }
     catch (error) {
-      if (error.code === 'ENOENT') continue;
+      if (error.code === 'ENOENT' || error.code === 'EVERSION') continue;
       try { unlinkSync(file); } catch {}
       continue;
     }
@@ -335,6 +352,7 @@ export async function reapFile(file, tree = new ProcessTree()) {
   let record;
   try { record = readRecord(file); }
   catch (error) {
+    if (error.code === 'EVERSION') return {kept: true};
     if (error.code !== 'ENOENT') try { unlinkSync(file); } catch {}
     return {kept: false};
   }

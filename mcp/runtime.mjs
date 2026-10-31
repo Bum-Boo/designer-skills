@@ -61,7 +61,7 @@ export class Runtime {
       const grouped = this.tree.grouped;
       const child = spawn(command, args, {cwd: this.workspace, shell: false, windowsHide: true, detached: grouped,
         stdio: ['ignore', 'pipe', 'pipe'], env: {...process.env, PYTHONUTF8: '1'}});
-      const launch = {pid: child.pid, spawnedAt: this.tree.now(), grouped};
+      const launch = {pid: child.pid, spawnedAt: (child.pid && this.tree.startOf(child.pid)) ?? this.tree.now(), grouped};
       this.children.add(child);
       if (child.pid) this.registry?.add(launch);
       let stdout = '', stderr = '', failure, escalation, settled = false, stopping = false;
@@ -84,7 +84,7 @@ export class Runtime {
         this.children.delete(child);
         this.stoppers.delete(stop);
         // Keep the record until a Windows tree stop is confirmed, so the reaper can still retry it.
-        Promise.all(pending).then(() => this.registry?.delete(child.pid), () => {});
+        Promise.all(pending).then(() => this.registry?.delete(launch), () => {});
         if (failure) reject(failure);
         else if (!codes.includes(code)) reject(new Error(`Tool exited ${code}: ${(stderr || stdout).slice(-4000)}`));
         else resolve({code, stdout, stderr});
@@ -116,7 +116,7 @@ export class Runtime {
       child.once('exit', () => {
         // Bounds which processes can still be its children once its PID may be reused.
         launch.exitedAt = this.tree.now();
-        this.registry?.update(child.pid, {exitedAt: launch.exitedAt});
+        this.registry?.update(launch, {exitedAt: launch.exitedAt});
       });
       child.on('close', finish);
     });
